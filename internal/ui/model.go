@@ -4,39 +4,73 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
-	domain "github.com/eaudetcobello/lxd-tui/internal/domain"
+	"github.com/eaudetcobello/lxd-tui/internal/dao/interfaces"
+	lxd_dao "github.com/eaudetcobello/lxd-tui/internal/dao/lxd"
 )
 
 type model struct {
 	cursor      int
-	selected    map[int]*domain.Resource
-	currentType domain.ResourceType
-	resources   map[domain.ResourceType][]domain.Resource
+	selected    map[int]*interface{}
+	currentView View
+
+	apiClient lxd_dao.LXDProvider
+
+	instances []interfaces.Instance
+	projects  []interfaces.Project
 }
 
-func InitialModel(containers []domain.Resource, projects []domain.Resource) model {
-	return model{
+func InitialModel(apiClient lxd_dao.LXDProvider) model {
+	model := model{
 		cursor:      0,
-		selected:    make(map[int]*domain.Resource),
-		currentType: domain.TypeProject,
-		resources: map[domain.ResourceType][]domain.Resource{
-			domain.TypeContainer: containers,
-			domain.TypeProject:   projects,
-		},
+		selected:    make(map[int]*any),
+		currentView: ViewInstances,
+		apiClient:   apiClient,
 	}
+	return model
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return tea.Batch(
+		loadContainers(m.apiClient),
+		loadProjects(m.apiClient),
+	)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+
+	// Handle container and project loading
+	case InstancesLoadedMsg:
+		if msg.err != nil {
+			return m, nil
+		}
+		m.instances = msg.instances
+		return m, nil
+	case ProjectsLoadedMsg:
+		if msg.err != nil {
+			return m, nil
+		}
+		m.projects = msg.projects
+	case RefreshMsg:
+		// todo only refresh the current view
+		return m, tea.Batch(
+			loadContainers(m.apiClient),
+			loadProjects(m.apiClient),
+		)
+
+	// Handle key presses
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "j", "down":
-			if m.cursor+1 < len(m.resources[m.currentType]) {
-				m.cursor++
+			switch m.currentView {
+			case ViewInstances:
+				if m.cursor+1 < len(m.instances) {
+					m.cursor++
+				}
+			case ViewProjects:
+				if m.cursor+1 < len(m.projects) {
+					m.cursor++
+				}
 			}
 		case "k", "up":
 			if m.cursor-1 >= 0 {
@@ -46,15 +80,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if _, ok := m.selected[m.cursor]; ok {
 				delete(m.selected, m.cursor)
 			} else {
-				m.selected[m.cursor] = &m.resources[m.currentType][m.cursor]
+				var item any
+				switch m.currentView {
+				case ViewInstances:
+					item = m.instances[m.cursor]
+				case ViewProjects:
+					item = m.projects[m.cursor]
+				}
+				m.selected[m.cursor] = &item
 			}
 		case "tab":
-			switch m.currentType {
-			case domain.TypeContainer:
-				m.currentType = domain.TypeProject
-			case domain.TypeProject:
-				m.currentType = domain.TypeContainer
+			switch m.currentView {
+			case ViewInstances:
+				m.currentView = ViewProjects
+			case ViewProjects:
+				m.currentView = ViewInstances
 			}
+		case "ctrl+d":
+
 		case "q":
 			return m, tea.Quit
 		}
@@ -65,29 +108,38 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	s := ""
 
-	for i, choice := range m.resources[m.currentType] {
-		cursor := " "
-		if m.cursor == i {
-			cursor = ">"
+	switch m.currentView {
+	case ViewInstances:
+		s += "Containers\n"
+		s += "---------\n"
+		for i, container := range m.instances {
+			cursor := " "
+			if m.cursor == i {
+				cursor = ">"
+			}
+			checked := " "
+			if _, ok := m.selected[i]; ok {
+				checked = "x"
+			}
+			s += fmt.Sprintf("%s [%s] %s - %s\n", cursor, checked, container.Name, container.Status)
 		}
 
-		checked := " "
-		if _, ok := m.selected[i]; ok {
-			checked = "x"
-		}
-
-		if choice.GetType() == domain.TypeContainer {
-			container := choice.(domain.ContainerResource)
-			s += fmt.Sprintf("%s [%s] %s - %s - %s\n", cursor, checked, choice.GetName(), container.GetStatus(), container.GetLastUsedAt())
-			continue
-		} else if choice.GetType() == domain.TypeProject {
-			project := choice.(domain.ProjectResource)
-			s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, project.GetName())
-			continue
+	case ViewProjects:
+		s += "Projects\n"
+		s += "-------\n"
+		for i, project := range m.projects {
+			cursor := " "
+			if m.cursor == i {
+				cursor = ">"
+			}
+			checked := " "
+			if _, ok := m.selected[i]; ok {
+				checked = "x"
+			}
+			s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, project)
 		}
 	}
 
 	s += "\nPress q to quit.\n"
-
 	return s
 }
