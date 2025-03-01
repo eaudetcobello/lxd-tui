@@ -16,4 +16,5 @@ const (
 type InstanceDAO interface {
 	// GetInstances returns a list of instances
 	GetInstances(instanceType InstanceType, projectName string) ([]Instance, error)
+	DeleteInstance(instanceName string, projectName string) error
 }

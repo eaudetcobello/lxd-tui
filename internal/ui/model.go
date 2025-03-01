@@ -10,7 +10,7 @@ import (
 
 type model struct {
 	cursor      int
-	selected    map[int]*interface{}
+	selected    map[int]*any
 	currentView View
 
 	apiClient lxd_dao.LXDProvider
@@ -97,6 +97,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.currentView = ViewInstances
 			}
 		case "ctrl+d":
+			switch m.currentView {
+			case ViewInstances:
+				if m.instances[m.cursor].Status == "Running" {
+					err := m.apiClient.StopInstance(m.instances[m.cursor].Name, "")
+					if err != nil {
+						m.apiClient.Logger.Error(err, "Error stopping instance")
+					}
+				}
+				go func() {
+					err := m.apiClient.DeleteInstance(m.instances[m.cursor].Name, "")
+					if err != nil {
+						m.apiClient.Logger.Error(err, "Error deleting instance")
+					}
+				}()
+			}
 
 		case "q":
 			return m, tea.Quit
