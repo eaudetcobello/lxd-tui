@@ -32,6 +32,16 @@ func InitialModel(apiClient lxd.LXDProvider) model {
 	return model
 }
 
+func (m model) getCurrentListLength() int {
+	switch m.currentView {
+	case ViewInstances:
+		return len(m.instances)
+	case ViewProjects:
+		return len(m.projects)
+	}
+	return 0
+}
+
 func (m model) Init() tea.Cmd {
 	return refreshAll(m.apiClient)
 }
@@ -73,19 +83,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "j", "down":
-			switch m.currentView {
-			case ViewInstances:
-				if m.cursor+1 < len(m.instances) {
-					m.cursor++
-				}
-			case ViewProjects:
-				if m.cursor+1 < len(m.projects) {
-					m.cursor++
-				}
+			if m.cursor < m.getCurrentListLength()-1 {
+				m.cursor++
+			} else {
+				m.cursor = 0
 			}
 		case "k", "up":
-			if m.cursor-1 >= 0 {
+			if m.cursor > 0 {
 				m.cursor--
+			} else {
+				m.cursor = m.getCurrentListLength() - 1
 			}
 		case "enter", " ":
 			if _, ok := m.selected[m.cursor]; ok {
