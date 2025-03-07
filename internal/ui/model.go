@@ -5,7 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/eaudetcobello/lxd-tui/internal/dao/interfaces"
-	lxd_dao "github.com/eaudetcobello/lxd-tui/internal/dao/lxd"
+	"github.com/eaudetcobello/lxd-tui/internal/dao/lxd"
 )
 
 type model struct {
@@ -13,33 +13,32 @@ type model struct {
 	selected    map[int]*any
 	currentView View
 
-	apiClient lxd_dao.LXDProvider
+	apiClient lxd.LXDProvider
 
 	instances []interfaces.Instance
 	projects  []interfaces.Project
+
+	error string
 }
 
-func InitialModel(apiClient lxd_dao.LXDProvider) model {
+func InitialModel(apiClient lxd.LXDProvider) model {
 	model := model{
 		cursor:      0,
 		selected:    make(map[int]*any),
 		currentView: ViewInstances,
 		apiClient:   apiClient,
+		error:       "",
 	}
 	return model
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(
-		loadContainers(m.apiClient),
-		loadProjects(m.apiClient),
-	)
+	return refreshAll(m.apiClient)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
-	// Handle container and project loading
 	case InstancesLoadedMsg:
 		if msg.err != nil {
 			return m, nil
@@ -53,10 +52,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.projects = msg.projects
 	case RefreshMsg:
 		// todo only refresh the current view
-		return m, tea.Batch(
-			loadContainers(m.apiClient),
-			loadProjects(m.apiClient),
-		)
+		return m, refreshAll(m.apiClient)
+	case StopInstanceMsg:
+		if msg.err != nil {
+			m.error = fmt.Sprintf("Error stopping instance: %v", msg.err)
+			return m, nil
+		}
+		return m, nil
+	case DeleteInstanceMsg:
+		if msg.err != nil {
+			m.error = fmt.Sprintf("Error deleting instance: %v", msg.err)
+			return m, nil
+		}
+
+		m.cursor = 0
+
+		return m, refreshAll(m.apiClient)
 
 	// Handle key presses
 	case tea.KeyMsg:
@@ -96,21 +107,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case ViewProjects:
 				m.currentView = ViewInstances
 			}
+		case "r":
+			return m, refreshAll(m.apiClient)
 		case "ctrl+d":
 			switch m.currentView {
 			case ViewInstances:
 				if m.instances[m.cursor].Status == "Running" {
-					err := m.apiClient.StopInstance(m.instances[m.cursor].Name, "")
-					if err != nil {
-						m.apiClient.Logger.Error(err, "Error stopping instance")
+					var cmds []tea.Cmd
+
+					for i := range m.selected {
+						cmds = append(cmds, deleteAndStopInstance(m.apiClient, m.instances[i].Name))
 					}
+
+					m.selected = make(map[int]*any)
+
+					return m, tea.Batch(cmds...)
 				}
-				go func() {
-					err := m.apiClient.DeleteInstance(m.instances[m.cursor].Name, "")
-					if err != nil {
-						m.apiClient.Logger.Error(err, "Error deleting instance")
-					}
-				}()
 			}
 
 		case "q":
@@ -127,6 +139,7 @@ func (m model) View() string {
 	case ViewInstances:
 		s += "Containers\n"
 		s += "---------\n"
+
 		for i, container := range m.instances {
 			cursor := " "
 			if m.cursor == i {
@@ -136,6 +149,7 @@ func (m model) View() string {
 			if _, ok := m.selected[i]; ok {
 				checked = "x"
 			}
+
 			s += fmt.Sprintf("%s [%s] %s - %s\n", cursor, checked, container.Name, container.Status)
 		}
 

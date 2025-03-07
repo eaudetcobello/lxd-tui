@@ -15,3 +15,12 @@ type ProjectsLoadedMsg struct {
 type RefreshMsg struct {
 	err error
 }
+
+type StopInstanceMsg struct {
+	err error
+}
+
+type DeleteInstanceMsg struct {
+	instanceName string
+	err          error
+}

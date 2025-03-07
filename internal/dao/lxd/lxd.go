@@ -1,4 +1,4 @@
-package lxd_dao
+package lxd
 
 import (
 	"fmt"
@@ -70,6 +70,7 @@ func (c LXDProvider) GetInstances(instanceType InstanceType, projectName string)
 }
 
 func (c LXDProvider) DeleteInstance(instanceName string, projectName string) error {
+	c.Logger.Info(fmt.Sprintf("Deleting instance: %s", instanceName))
 	op, err := c.Server.DeleteInstance(instanceName)
 	if err != nil {
 		return fmt.Errorf("Error deleting instance: %w", err)
@@ -78,6 +79,7 @@ func (c LXDProvider) DeleteInstance(instanceName string, projectName string) err
 	if err != nil {
 		return fmt.Errorf("Error waiting for operation: %w", err)
 	}
+	c.Logger.Info(fmt.Sprintf("Instance deleted: %s", instanceName))
 	return nil
 }
 
@@ -85,7 +87,8 @@ func (c LXDProvider) GetVMs() ([]Instance, error) {
 	return c.getInstancesByType(api.InstanceTypeVM)
 }
 
-func (c LXDProvider) StopInstance(name string, s string) error {
+func (c LXDProvider) StopInstance(name string) error {
+	c.Logger.Info(fmt.Sprintf("Stopping instance: %s", name))
 	op, err := c.Server.UpdateInstanceState(name, api.InstanceStatePut{Action: "stop"}, "")
 	if err != nil {
 		return fmt.Errorf("Error stopping instance: %w", err)
@@ -94,5 +97,6 @@ func (c LXDProvider) StopInstance(name string, s string) error {
 	if err != nil {
 		return fmt.Errorf("Error waiting for operation: %w", err)
 	}
+	c.Logger.Info(fmt.Sprintf("Instance stopped: %s", name))
 	return nil
 }

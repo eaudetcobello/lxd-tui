@@ -8,9 +8,9 @@ import (
 )
 
 type Logger interface {
-	Info(msg string, fields ...any)
-	Error(err error, msg string, fields ...any)
-	Debug(msg string, fields ...any)
+	Info(msg string)
+	Error(err error, msg string)
+	Debug(msg string)
 }
 
 type ZeroLogger struct {
@@ -40,14 +40,14 @@ func NewFileLogger(filePath string) (Logger, error) {
 	}, nil
 }
 
-func (l ZeroLogger) Info(msg string, fields ...any) {
-	l.logger.Info().Fields(fields).Msg(msg)
+func (l ZeroLogger) Info(msg string) {
+	l.logger.Info().Msg(msg)
 }
 
-func (l ZeroLogger) Error(err error, msg string, fields ...any) {
-	l.logger.Error().Fields(fields).Err(err).Msg(msg)
+func (l ZeroLogger) Error(err error, msg string) {
+	l.logger.Error().Err(err).Msg(msg)
 }
 
-func (l ZeroLogger) Debug(msg string, fields ...any) {
-	l.logger.Debug().Fields(fields).Msg(msg)
+func (l ZeroLogger) Debug(msg string) {
+	l.logger.Debug().Msg(msg)
 }
